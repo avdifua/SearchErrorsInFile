@@ -35,6 +35,9 @@ Execute the tool with the required flags:
 ### Example
 `./searchErrors -p "/var/log/myapp.log" -e "Connection Error" -c 10 -w 5 -t 3600`
 
+### Example line in a log file
+`Dec  4 03:42:06 prod-host.com Corp: [INFO:Filter] 6204, Delivered info-test@gmail.com -> test-info@gmail.net pid:6204 elapsed:0`
+
 ## Note
 Ensure the time zone in the log file matches the local host's time zone for accurate time comparisons.
 
