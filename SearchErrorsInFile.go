@@ -6,17 +6,19 @@ import (
 	"github.com/spf13/cobra"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 )
 
 var attrKeys struct {
-	logFile   string
-	error     string
-	criticl   int
-	warning   int
-	timePoint int
+	logFile        string
+	error          string
+	critical       int
+	warning        int
+	timePoint      int
+	logFilePattern string
 }
 
 var semaphoreAttr struct {
@@ -32,13 +34,23 @@ var sharedListofEroors struct {
 var argsCli = &cobra.Command{
 	Use:   "searchErrors",
 	Short: "Search for specific errors in a log file",
-	Long: `A command-line tool that scans a specified log file for certain error patterns or messages. 
-        It allows setting thresholds for critical and warning alert levels based on the occurrence of these errors within a given time frame.
-        Note: Ensure the time zone in the log file matches the local host's time zone for accurate time comparisons.`,
+	Long: `A command-line tool that scans a specified log file for certain error patterns or messages.
+This tool allows setting thresholds for critical and warning alert levels based on the occurrence of these errors within a given time frame. It can handle both static and dynamically named log files.
+
+For dynamically named log files, use the -l flag to specify a log file name pattern and the -p flag to specify the directory path. 
+The pattern should include '2006-01-02' as a placeholder for the date, which the tool will replace with the current date in 'YYYY-MM-DD' format. 
+For example, if the log files are named like 'ExampleLogFile-2023-01-02.log', use -l 'ExampleLogFile-2006-01-02.log'. The tool will automatically generate the correct file name for the current day.
+
+Note: Ensure the time zone in the log file matches the local host's time zone for accurate time comparisons.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if attrKeys.warning > attrKeys.criticl {
+		if attrKeys.warning > attrKeys.critical {
 			fmt.Println("Warning number of errors must be less than critical number of errors")
 			os.Exit(2)
+		}
+		if attrKeys.logFilePattern != "" {
+			currentDate := time.Now().Format("2006-01-02")
+			filename := strings.Replace(attrKeys.logFilePattern, "2006-01-02", currentDate, 1)
+			attrKeys.logFile = filepath.Join(attrKeys.logFile, filename)
 		}
 	},
 }
@@ -46,27 +58,28 @@ var argsCli = &cobra.Command{
 func init() {
 	argsCli.PersistentFlags().StringVarP(&attrKeys.logFile, "path", "p", "", "Specify the full path to the log file to be analyzed")
 	argsCli.PersistentFlags().StringVarP(&attrKeys.error, "error", "e", "", "Define the error string to search for in the log file")
-	argsCli.PersistentFlags().IntVarP(&attrKeys.criticl, "critical", "c", 0, "Set the threshold of errors to trigger a critical alert")
+	argsCli.PersistentFlags().IntVarP(&attrKeys.critical, "critical", "c", 0, "Set the threshold of errors to trigger a critical alert")
 	argsCli.PersistentFlags().IntVarP(&attrKeys.warning, "warning", "w", 0, "Set the threshold of errors to trigger a warning alert")
 	argsCli.PersistentFlags().IntVarP(&attrKeys.timePoint, "time-point", "t", 0, "Time frame in seconds to look back for errors from the current time")
+	argsCli.PersistentFlags().StringVarP(&attrKeys.logFilePattern, "log-pattern", "l", "", "Pattern for the log file name with a date placeholder, e.g., 'SpamCop-2006-01-02.log'")
 
 	argsCli.MarkFlagRequired("path")
 	argsCli.MarkFlagRequired("error")
 	argsCli.MarkFlagRequired("critical")
 	argsCli.MarkFlagRequired("warning")
-
 }
 
 func exitCode() {
+	fmt.Println(attrKeys.logFile)
 	switch {
-	case len(sharedListofEroors.listOfErrors) >= attrKeys.criticl:
-		fmt.Printf("CRITICAL: %d errors \"%s\" were found in the log file for the last %d sec!\n", len(sharedListofEroors.listOfErrors), attrKeys.error, attrKeys.timePoint)
+	case len(sharedListofEroors.listOfErrors) >= attrKeys.critical:
+		fmt.Printf("CRITICAL: %d errors \"%s\" were found in the log file %s for the last %d sec!\n", len(sharedListofEroors.listOfErrors), attrKeys.error, attrKeys.logFile, attrKeys.timePoint)
 		os.Exit(2)
 	case len(sharedListofEroors.listOfErrors) >= attrKeys.warning:
-		fmt.Printf("WARNING: %d errors \"%s\" were found in the log file for the last %d sec!\n", len(sharedListofEroors.listOfErrors), attrKeys.error, attrKeys.timePoint)
+		fmt.Printf("WARNING: %d errors \"%s\" were found in the log file %s for the last %d sec!\n", len(sharedListofEroors.listOfErrors), attrKeys.error, attrKeys.logFile, attrKeys.timePoint)
 		os.Exit(1)
 	default:
-		fmt.Printf("OK: Errors not found or less than thresholds CRITICAL: %d or WARNING: %d\nNumber of detected errors: %d\n", attrKeys.criticl, attrKeys.warning, len(sharedListofEroors.listOfErrors))
+		fmt.Printf("OK: Errors not found in log file %s!\n", attrKeys.logFile)
 		os.Exit(0)
 	}
 }
